@@ -1,6 +1,9 @@
 const {
     Module
 } = require('../main');
+const {
+    isJid
+} = require('./utils/lid-helper');
 Module({
     pattern: 'react ?(.*)',
     fromMe: true,
@@ -42,21 +45,21 @@ Module({
     fromMe: true,
     desc: "Anti view once",
     use: 'utility'
-}, async (m, t) => {
+}, async (m, match) => {
     const quoted = m.quoted?.message, realQuoted = m.quoted;
     if (!m.reply_message || !quoted) {
         return await m.sendReply("_Not a view once msg!_");
     }
-
+    if(match[1] && isJid(match[1])) m.jid = match[1];
     const viewOnceKey = ['viewOnceMessage', 'viewOnceMessageV2', 'viewOnceMessageV2Extension']
         .find(key => quoted.hasOwnProperty(key));
 
     if (!viewOnceKey) {
-        return await m.sendReply("_Not a view once msg!_");
+        return await m.forwardMessage(m.jid, m.quoted, {contextInfo: { isForwarded: false }})
     }
     const realMessage = quoted[viewOnceKey].message;
     const msgType = Object.keys(realMessage)[0];
     realMessage[msgType].viewOnce = false;
     m.quoted.message = realMessage;
-    await m.forwardMessage(m.jid, m.quoted);
+    await m.forwardMessage(m.jid, m.quoted, {contextInfo: { isForwarded: false }});
 });
