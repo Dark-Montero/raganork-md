@@ -560,36 +560,49 @@ return await message.sendReply(msg)
 }}));
 
 Module({
-    pattern: 'tag(?:all|admin)?',
+    pattern: 'tag(all|admin)? ?(.*)?',
     fromMe: false,
     desc: Lang.TAGALL_DESC,
     use: 'group',
-    usage: '.tag (reply to message)\n.tagall (tag everyone)\n.tagadmin (tag admins only)'
+    usage: '.tag (reply to message)\n.tagall (tag everyone)\n.tagadmin (tag admins only)\n.tag 120363355307899193@g.us (tag in specific group)'
 }, async (message, match) => {
-  if (!message.isGroup) return await message.sendReply(Lang.GROUP_COMMAND);
-
+  const groupJidMatch = match[2]?.match(/(\d+@g\.us)/);
+  
+  if (groupJidMatch) {
+    message.jid = groupJidMatch[1];
+  } else if (!message.isGroup) {
+    return await message.sendReply(Lang.GROUP_COMMAND);
+  }
+  
   const adminAccessValidated = ADMIN_ACCESS ? await isAdmin(message, message.sender) : false;
   if (!(message.fromOwner || adminAccessValidated)) return;
-
-  const { participants } = await message.client.groupMetadata(message.jid);
-  const isTagAdmin = match[0]?.includes('admin');
-  const isTagAll = match[0]?.includes('all');
-  const isReply = !!message.reply_message;
-
-  if (!isReply && !isTagAdmin && !isTagAll) {
-    return await message.sendReply(`_Tag what?_\n\n${handler}tag \`admin\`\n${handler}tag \`all\`\n${handler}tag \`(reply)\``);
+  
+  let participants;
+  try {
+    const groupMetadata = await message.client.groupMetadata(message.jid);
+    participants = groupMetadata.participants;
+  } catch (error) {
+    return await message.sendReply('_Error: Unable to fetch group metadata. Please check the group ID._');
   }
-
+  
+  const isTagAdmin = match[1]?.includes('admin');
+  const isTagAll = match[1]?.includes('all');
+  const isReply = !!message.reply_message;
+  
+  if (!isReply && !isTagAdmin && !isTagAll) {
+    return await message.sendReply(`_Tag what?_\n\n${handler}tag \`admin\`\n${handler}tag \`all\`\n${handler}tag \`(reply)\`\n${handler}tag \`120363355307899193@g.us\``);
+  }
+  
   const targets = [];
   let msgText = '';
-
+  
   for (let i = 0; i < participants.length; i++) {
     const p = participants[i];
     if (isTagAdmin && !p.admin) continue;
     targets.push(p.id.replace('c.us', 's.whatsapp.net'));
     msgText += `${targets.length}. @${p.id.split('@')[0]}\n`;
   }
-
+  
   if (isReply) {
     await message.client.sendMessage(message.jid, {
       forward: message.quoted,

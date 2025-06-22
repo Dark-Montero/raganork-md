@@ -19,15 +19,16 @@ const DATABASE_URL = process.env.DATABASE_URL === undefined ? './bot.db' : proce
 const DEBUG = process.env.DEBUG === undefined ? false : convertToBool(process.env.DEBUG);
 
 const sequelize = DATABASE_URL === './bot.db'
-    ? new Sequelize({ dialect: "sqlite", storage: DATABASE_URL, logging: DEBUG })
+    ? new Sequelize({ dialect: "sqlite", storage: DATABASE_URL, logging: DEBUG, retry: {match: [/SQLITE_BUSY/,/database is locked/,/EBUSY/], max: 3 }, })
     : new Sequelize(DATABASE_URL, { dialectOptions: { ssl: { require: true, rejectUnauthorized: false } }, logging: DEBUG });
 
 const SESSION_STRING = process.env.SESSION || process.env.SESSION_ID
 
-const SESSION = SESSION_STRING ? SESSION_STRING.split(',').map(s => s.split("~")[1].trim()) : ['qr-session'];
+const SESSION = SESSION_STRING ? SESSION_STRING.split(',').map(s => s.split("~")[1].trim()) : [];
 
 const settingsMenu = [
     { title: "PM antispam block", env_var: "PM_ANTISPAM" },
+    { title: "Command auto reaction", env_var: "CMD_REACTION" },
     { title: "Auto read all messages", env_var: "READ_MESSAGES" },
     { title: "Auto read command messages", env_var: "READ_COMMAND" },
     { title: "Auto read status updates", env_var: "AUTO_READ_STATUS" },
@@ -79,6 +80,7 @@ const baseConfig = {
     BOT_NAME: process.env.BOT_NAME || 'Raganork',
     AUDIO_DATA: process.env.AUDIO_DATA === undefined || process.env.AUDIO_DATA === "private" ? 'ꪶ͢٭𝑺𝜣𝑼𝑹𝛢𝑽𝑲𝑳¹¹ꫂ;Raganork MD bot;https://i.imgur.com/P7ziVhr.jpeg' : process.env.AUDIO_DATA,
     TAKE_KEY: process.env.TAKE_KEY || '',
+    CMD_REACTION: convertToBool(process.env.CMD_REACTION) || false,
     MODE: process.env.MODE || 'private',
     WARN: process.env.WARN || '4',
     ANTILINK_WARN: process.env.ANTILINK_WARN || '',
@@ -161,18 +163,24 @@ const config = new Proxy(baseConfig, {
 });
 
 Object.defineProperty(config, 'loadFromDB', {
-    value: function (dbValues = {}) {
-        console.log('Loading config values from database...');
-        let loadedCount = 0;
-
+    value: function (dbValues = {}) {        
+        let loadedCount = 0;        
+        const booleanKeys = [
+            ...settingsMenu.map(item => item.env_var),
+            'MANGLISH_CHATBOT'
+        ];
         for (const [key, value] of Object.entries(dbValues)) {
             if (value !== undefined && value !== null) {
-                this[key] = value;
+                if (booleanKeys.includes(key)) {
+                    this[key] = convertToBool(value);
+                } else {
+                    this[key] = value;
+                }
                 loadedCount++;
             }
         }
 
-        console.log(`Loaded ${loadedCount} dynamic config values from database`);
+        console.log(`- Loaded ${loadedCount} vars`);
         return this;
     },
     writable: false,
